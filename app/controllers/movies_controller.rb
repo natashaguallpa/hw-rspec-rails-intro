@@ -2,9 +2,8 @@ class MoviesController < ApplicationController
   before_action :force_index_redirect, only: [:index]
 
   def show
-    id = params[:id] # retrieve movie ID from URI route
-    @movie = Movie.find(id) # look up movie by unique ID
-    # will render app/views/movies/show.<extension> by default
+    id = params[:id]
+    @movie = Movie.find(id)
   end
 
   def index
@@ -12,13 +11,36 @@ class MoviesController < ApplicationController
     @movies = Movie.with_ratings(ratings_list, sort_by)
     @ratings_to_show_hash = ratings_hash
     @sort_by = sort_by
-    # remember the correct settings for next time
     session['ratings'] = ratings_list
     session['sort_by'] = @sort_by
   end
 
   def new
-    # default: render 'new' template
+  end
+
+  def search_tmdb
+    if params[:title].blank?
+      flash[:warning] = 'Please fill in all required fields!'
+      redirect_to search_path
+      return
+    end
+    @movies = Movie.find_in_tmdb(
+      title: params[:title],
+      release_year: params[:release_year],
+      language: params[:language]
+    )
+    flash.now[:warning] = 'No movies found with given parameters!' if @movies.blank?
+  end
+
+  def add_movie
+    movie = Movie.create!(
+      title: params[:title],
+      release_date: params[:release_date].presence,
+      rating: params[:rating].presence || 'R',
+      description: params[:description]
+    )
+    flash[:success] = "#{movie.title} was successfully added to RottenPotatoes."
+    redirect_to search_path
   end
 
   def create
@@ -49,10 +71,13 @@ class MoviesController < ApplicationController
 
   def force_index_redirect
     return unless !params.key?(:ratings) || !params.key?(:sort_by)
-
     flash.keep
     url = movies_path(sort_by: sort_by, ratings: ratings_hash)
     redirect_to url
+  end
+
+  def movie_params
+    params.require(:movie).permit(:title, :rating, :description, :release_date)
   end
 
   def ratings_list
@@ -60,7 +85,7 @@ class MoviesController < ApplicationController
   end
 
   def ratings_hash
-    ratings_list.to_h { |item| [item, "1"] }
+    ratings_list.to_h { |item| [item, '1'] }
   end
 
   def sort_by
